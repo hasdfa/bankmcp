@@ -11,10 +11,13 @@ services:
     environment:
       DATA_DIR: /data
       PORT: 8080
+      # Enable with the corresponding read-only volume mount below:
+      # CUSTOM_ACCOUNTS_FILE: /run/secrets/custom-accounts.yaml
     ports:
       - "8080:8080"
     volumes:
       - bank-data:/data
+      # - ./custom-accounts.yaml:/run/secrets/custom-accounts.yaml:ro
       # If you use EB_PRIVATE_KEY_PATH instead of EB_PRIVATE_KEY, mount the key:
       # - ./secrets/enablebanking.pem:/run/secrets/enablebanking.pem:ro
 
