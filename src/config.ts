@@ -91,6 +91,9 @@ export const config = {
   },
   adminPassword: env.ADMIN_PASSWORD ?? "",
   notifyWebhookUrl: env.NOTIFY_WEBHOOK_URL ?? "",
+  get wiseApiToken(): string {
+    return (env.WISE_API_TOKEN ?? "").trim();
+  },
   // Hosts an OAuth client may send the sign-in back to. Stops a phishing link
   // from registering a client that redirects your authorization code elsewhere.
   // Defaults cover the well-known MCP clients; subdomains are included.

@@ -226,6 +226,61 @@ Notifications go to `NOTIFY_WEBHOOK_URL` as a Slack message or a JSON POST.
 Enable Banking's own webhooks cover payment initiation only, so account data
 is polled. There is no way around that under PSD2.
 
+## Optional Wise jars and statements
+
+Enable Banking only exposes the accounts included in its bank consent. For
+additional Wise data, set `WISE_API_TOKEN` on the server to a **read-only** Wise
+API token, then restart and refresh your client's tool list. This adds four
+tools, using Wise's documented `2026Q4` API:
+
+| Tool | Data |
+|---|---|
+| `list_wise_profiles` | Accessible personal and business profiles and their metadata |
+| `list_wise_balances` | All returned `STANDARD` currency balances and `SAVINGS` jars for a profile, including invested jars |
+| `get_wise_balance` | One balance/jar with all returned provider fields |
+| `get_wise_statement` | Full JSON statement for one balance/jar and an inclusive UTC date range |
+
+Start with profiles, then list balances for each profile. Jars keep their
+individual IDs and names even when several use the same currency. Responses
+preserve available funds (`amount`), `reservedAmount`, `cashAmount`,
+`totalWorth`, `investmentState` and other metadata when Wise supplies them.
+These values have different meanings: do not sum them. Missing values are
+unknown, not zero. Wise `STANDARD` balances may duplicate accounts already
+connected through Enable Banking, so do not add both sources into a total.
+
+Statements retain every returned transaction and provider field, including
+fees, interest, investment-trade entries and closing balances where present.
+For a long history, request adjacent, non-overlapping ranges of **at most 469
+calendar days** for every accessible balance, starting at its creation date.
+For example, `from: "2025-01-01", to: "2025-12-31"` includes both days; the
+next range starts `2026-01-01`. There is no local filtering or transaction cap
+within a successful statement response. A successful range does not establish
+coverage for other dates, balances, or inaccessible/closed jars.
+
+**Access and investment limits:** token availability depends on the Wise
+profile. Wise's [personal-token guide](https://docs.wise.com/guides/developer/auth-and-security/personal-api-token)
+currently describes business-account tokens and restricts balance statements
+outside the US, Canada, Australia, New Zealand, Singapore and Malaysia.
+The [statement endpoint](https://docs.wise.com/api-reference/balance-statement/balancestatementget)
+also documents Strong Customer Authentication (SCA). This integration cannot
+complete SCA; denied requests return explicit errors, not empty transactions.
+An Enable Banking consent does not grant direct Wise API access.
+
+The [balance API](https://docs.wise.com/api-reference/balance/balancelist)
+reports investment state and valuation fields, but does not establish whether
+a jar is Stocks or Interest, individual stock/fund holdings, units, yield or
+accrued interest. Do not infer those from `INVESTED` or from available cash.
+Use Wise's own exports for details these endpoints do not expose. Support is
+tested with documented response fixtures; access for your live profiles must
+be verified with your token.
+
+These optional tools make GET requests only, keep the token on the server,
+and do not persist balances or statements. They remain behind the existing
+BankMCP OAuth in hosted mode and are never exposed to attestation-only grants.
+The existing Enable Banking account tools, watches, and summaries are unchanged;
+they do not automatically incorporate direct Wise data. Do not enter the token
+into a tool argument or commit it to your repository.
+
 ## Claude Code plugin
 
 The repository is also a Claude Code plugin marketplace. The `bank` plugin
