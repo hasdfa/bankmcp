@@ -226,6 +226,106 @@ Notifications go to `NOTIFY_WEBHOOK_URL` as a Slack message or a JSON POST.
 Enable Banking's own webhooks cover payment initiation only, so account data
 is polled. There is no way around that under PSD2.
 
+## Optional Wise jars and statements
+
+Enable Banking only exposes the accounts included in its bank consent. For
+additional Wise data, create a YAML file and set `CUSTOM_ACCOUNTS_FILE` to its
+path. Each entry is a named credential connection with a label, description,
+provider and provider-specific config. There is no fixed connection-count
+limit. **Wise is currently the only implemented provider**; unknown providers
+are rejected, rather than silently ignored.
+
+```yaml
+accounts:
+  - label: My Wise Business
+    description: Business cash, jars and statements
+    provider: wise
+    config:
+      api_key_env: WISE_BUSINESS_API_KEY
+  - label: My Wise Personal
+    description: Personal savings and spending
+    provider: wise
+    config:
+      api_key: "your-read-only-key"
+```
+
+Copy `custom-accounts.example.yaml` to `custom-accounts.yaml` (gitignored),
+then `chmod 600 custom-accounts.yaml`. Use exactly one of `config.api_key`
+(a literal key) or `config.api_key_env` (the name of a server environment
+variable containing the key). Set `CUSTOM_ACCOUNTS_FILE=./custom-accounts.yaml`
+and provide referenced key variables through your host environment or `.env`
+when using Compose / a Node command with `--env-file`. The server loads a
+configuration snapshot; restart after changes and refresh the client's tools.
+Labels must be unique ignoring case; tool calls use the exact label. Invalid
+YAML, duplicate labels, unsupported providers and missing keys are errors.
+Error messages never print YAML source or key values. YAML aliases are rejected.
+
+For Docker, uncomment the `CUSTOM_ACCOUNTS_FILE` environment setting and the
+read-only YAML volume mount in `compose.yaml`. The path **inside the container**
+is `/run/secrets/custom-accounts.yaml`; your local host path is the mount source.
+Use a build containing this feature (the upstream published image does not).
+The mounted file must be readable by the container's unprivileged Node user
+(UID 1000 in the supplied image); preserve restrictive permissions.
+
+`list_custom_accounts` exposes only labels, descriptions and providers. Every
+Wise tool requires an `account` label to select its credential; profile and
+balance IDs are interpreted within that connection. A label does not restrict
+which Wise profiles the token can access: all full-read BankMCP clients can
+use all configured connections. Tokens and their config are never returned to
+the assistant. This replaces the earlier single `WISE_API_TOKEN` setting in
+this PR; use `config.api_key_env: WISE_API_TOKEN` if keeping that variable name.
+
+The tools use Wise's documented `2026Q4` API:
+
+| Tool | Data |
+|---|---|
+| `list_custom_accounts` | Configured labels, descriptions and provider names, without credentials |
+| `list_wise_profiles` | Accessible personal and business profiles and their metadata |
+| `list_wise_balances` | All returned `STANDARD` currency balances and `SAVINGS` jars for a profile, including invested jars |
+| `get_wise_balance` | One balance/jar with all returned provider fields |
+| `get_wise_statement` | Full JSON statement for one balance/jar and an inclusive UTC date range |
+
+Start with custom accounts, then profiles and balances for each connection. Jars keep their
+individual IDs and names even when several use the same currency. Responses
+preserve available funds (`amount`), `reservedAmount`, `cashAmount`,
+`totalWorth`, `investmentState` and other metadata when Wise supplies them.
+These values have different meanings: do not sum them. Missing values are
+unknown, not zero. Wise `STANDARD` balances may duplicate accounts already
+connected through Enable Banking, so do not add both sources into a total.
+
+Statements retain every returned transaction and provider field, including
+fees, interest, investment-trade entries and closing balances where present.
+For a long history, request adjacent, non-overlapping ranges of **at most 469
+calendar days** for every accessible balance, starting at its creation date.
+For example, `from: "2025-01-01", to: "2025-12-31"` includes both days; the
+next range starts `2026-01-01`. There is no local filtering or transaction cap
+within a successful statement response. A successful range does not establish
+coverage for other dates, balances, or inaccessible/closed jars.
+
+**Access and investment limits:** token availability depends on the Wise
+profile. Wise's [personal-token guide](https://docs.wise.com/guides/developer/auth-and-security/personal-api-token)
+currently describes business-account tokens and restricts balance statements
+outside the US, Canada, Australia, New Zealand, Singapore and Malaysia.
+The [statement endpoint](https://docs.wise.com/api-reference/balance-statement/balancestatementget)
+also documents Strong Customer Authentication (SCA). This integration cannot
+complete SCA; denied requests return explicit errors, not empty transactions.
+An Enable Banking consent does not grant direct Wise API access.
+
+The [balance API](https://docs.wise.com/api-reference/balance/balancelist)
+reports investment state and valuation fields, but does not establish whether
+a jar is Stocks or Interest, individual stock/fund holdings, units, yield or
+accrued interest. Do not infer those from `INVESTED` or from available cash.
+Use Wise's own exports for details these endpoints do not expose. Support is
+tested with documented response fixtures and live profile/balance reads.
+Statement availability must still be verified for each profile and region.
+
+These optional tools make GET requests only, keep the token on the server,
+and do not persist balances or statements. They remain behind the existing
+BankMCP OAuth in hosted mode and are never exposed to attestation-only grants.
+The existing Enable Banking account tools, watches, and summaries are unchanged;
+they do not automatically incorporate direct Wise data. Do not enter the token
+into a tool argument or commit it to your repository.
+
 ## Claude Code plugin
 
 The repository is also a Claude Code plugin marketplace. The `bank` plugin

@@ -5,4 +5,6 @@ secrets
 *.pem
 .git
 test
+custom-accounts.yaml
+.context
 

@@ -1,0 +1,13 @@
+accounts:
+  - label: My Wise Business
+    description: Business cash, jars and statements
+    provider: wise
+    config:
+      api_key_env: WISE_BUSINESS_API_KEY
+  - label: My Wise Personal
+    description: Personal savings and spending
+    provider: wise
+    config:
+      api_key_env: WISE_PERSONAL_API_KEY
+      # Alternatively, replace api_key_env with api_key: "your-read-only-key".
+      # Never commit real keys. Protect the file with chmod 600.
